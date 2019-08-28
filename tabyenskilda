@@ -1,0 +1,132 @@
+import requests
+from bs4 import BeautifulSoup
+import datetime
+import smtplib
+from email.utils import formataddr
+from email.utils import formatdate
+from email.utils import COMMASPACE
+from email.header import Header
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+
+def get_mat_ava(url):
+
+    """Hämtar maten från åva"""
+
+    source_code = requests.get(url)
+    plain_text = source_code.text
+
+    soup = BeautifulSoup(plain_text, "html.parser")
+    results = soup.find_all("div", {"class", "items"})
+
+    try:
+        foodtoday = str(results[weekday])
+    except IndexError:
+        return "Weekend bois"
+    rows = foodtoday.splitlines()
+
+    foodlist = rows[3].strip("<span>").strip('class="attributes">').split("<")
+    finalfoodava = foodlist[0]
+
+    return finalfoodava
+
+
+def get_mat(url, day):
+
+    """Hämtar maten från teg"""
+
+    source_code = requests.get(url)
+    plain_text = source_code.text
+
+    soup = BeautifulSoup(plain_text, "html.parser")
+    results = soup.find_all('tr')
+
+    foodtoday = str(results[day + 1]).strip("<tr>").strip("</tr>").split("><")
+
+    return foodtoday[1].strip("</td>")
+
+
+def send_email(sender_name: str, sender_addr: str, smtp: str, port: str,
+               recipient_addr: list, subject: str, html: str, text: str,):
+
+    """Skickar mail"""
+
+    sender_name = Header(sender_name, 'utf-8').encode()
+
+    msg_root = MIMEMultipart('mixed')
+    msg_root['Date'] = formatdate(localtime=1)
+    msg_root['From'] = formataddr((sender_name, sender_addr))
+    msg_root['To'] = COMMASPACE.join(recipient_addr)
+    msg_root['Subject'] = Header(subject, 'utf-8')
+    msg_root.preamble = 'This is a multi-part message in MIME format.'
+
+    msg_related = MIMEMultipart('related')
+    msg_root.attach(msg_related)
+
+    msg_alternative = MIMEMultipart('alternative')
+    msg_related.attach(msg_alternative)
+
+    msg_text = MIMEText(text.encode('utf-8'), 'plain', 'utf-8')
+    msg_alternative.attach(msg_text)
+
+    msg_html = MIMEText(html.encode('utf-8'), 'html', 'utf-8')
+    msg_alternative.attach(msg_html)
+
+    mail_server = smtplib.SMTP(smtp, port)
+    mail_server.ehlo()
+
+    try:
+        mail_server.starttls()
+        mail_server.ehlo()
+    except smtplib.SMTPException as e:
+        print(e)
+
+    mail_server.login(sender_addr, password)
+    mail_server.send_message(msg_root)
+    mail_server.quit()
+
+
+if __name__ == '__main__':
+
+    # opens files
+    passwords = open("password", "r")
+    password = passwords.read()
+    passwords.close()
+
+    mails = open("mails", "r")
+    mail = mails.read()
+    adresses = mail.split()
+    mails.close()
+
+    # Usage:
+    weekday = datetime.datetime.today().weekday()
+    sender_name = 'theswagxdkiller69'
+    sender_addr = 'theswagxdkiller69@gmail.com'
+    smtp = 'smtp.gmail.com'
+    port = '587'
+    recipient_addr = adresses
+    subject = 'DAGENS MAT'
+    text = "Mat Teg: " + str(get_mat("https://www.tabyenskilda.se/passion-for-skolmat/", weekday))
+    text2 = "Mat Åva: " + get_mat_ava("https://skolmaten.se/ava-gymnasium/")
+    html = """
+        <html>
+        <head>
+        <meta http-equiv="content-type" content="text/html;charset=utf-8" />
+        </head>
+        <body>
+        <font face="verdana" size=2>{}<br/></font>
+        <br/>
+        <font face="verdana" size=2>{}<br/></font>
+        <br/>
+        <font face="verdana" size2><br/>Manuellt testutskick</font>
+        </body>
+        </html>
+        """.format(text, text2)  # template
+
+    if weekday < 5:
+        send_email(sender_name, sender_addr, smtp, port,
+                   recipient_addr, subject, html, text,)
+        print("Succes!")
+    else:
+        print("Did not send email, no lunch today")
